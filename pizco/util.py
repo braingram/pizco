@@ -16,34 +16,6 @@ class SignalError(Exception):
     pass
 
 
-def specable(f):
-    try:
-        inspect.getargspec(f)
-        return True
-    except:
-        return False
-
-
-def getspec(f):
-    if specable(f):
-        spec = inspect.getargspec(f)
-        defaults = []
-        if spec.defaults is not None:
-            defaults = spec.defaults
-        return inspect.ArgSpec(
-            spec.args, spec.varargs is not None,
-            spec.keywords is not None, defaults)
-    if hasattr(f, '__call__') and specable(f.__call__):
-        spec = getspec(f.__call__)
-        args = spec.args[1:]  # remove reference to self
-        return inspect.ArgSpec(
-            args, spec.varargs, spec.keywords, spec.defaults)
-    # TODO handle partials
-    raise ValueError(
-        "getspec doesn't know how to get function spec from type {}".format(
-            type(f)))
-
-
 class Signal(object):
     """PyQt like signal object
     """
@@ -59,46 +31,10 @@ class Signal(object):
         self._varargs = varargs
         self._varkwargs = varkwargs
 
-    def _verify_slot(self, slot):
-        # signal varags -> slot varargs
-        # signal args -> slot args (or varargs)
-        # signal kwargs -> slot kwargs
-        spec = getspec(slot)
-
-        if not spec.varargs:  # function expects args
-            if self._varargs:
-                raise SignalError(
-                    "Slot {} does not accept varargs".format(slot))
-            else:  # check nargs
-                maxargs = len(spec.args)
-                if maxargs < self._nargs:
-                    raise SignalError(
-                        "Slot {} does not accept enough args {}".format(
-                            slot, maxargs))
-                minargs = maxargs - len(spec.defaults)
-                if minargs > self._nargs:
-                    raise SignalError(
-                        "Slot {} expects too many args {}".format(
-                            slot, minargs))
-
-        if not spec.keywords:  # function only accepts specific kwargs
-            if self._varkwargs:
-                raise SignalError(
-                    "Slot {} does not accept varkwargs".format(slot))
-            else:  # signal only passes specific kwargs
-                kwargs = spec.args[::-1][:len(spec.defaults)]
-                for kw in self._kwargs:
-                    if kw not in kwargs:
-                        raise SignalError(
-                            "Slot {} does not accept keyword {}".format(
-                                slot, kw))
-
     def connect(self, slot):
         # add dummy connection type maybe this the place to create the
         # pyqtSignals to be able to resync with qt event loop
         if slot not in self.slots:
-            # verify that this slot works
-            self._verify_slot(slot)
             self.slots.append(slot)
 
     def disconnect(self, slot=None):
